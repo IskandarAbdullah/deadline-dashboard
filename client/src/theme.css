@@ -1,0 +1,180 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&display=swap');
+@import "tailwindcss";
+@import "tailwindcss-safe-area";
+
+@theme {
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 36px;
+  --text-4xl: 36px;
+  --text-4xl--line-height: 40px;
+  --text-5xl: 48px;
+  --text-5xl--line-height: 52px;
+  --font-display: "Archivo", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --text: #17203a;
+  --dim: #5b6478;
+  --border: #e2ded2;
+  --accent: #1d7a4f;
+  --ok: #1d7a4f;
+  --warn: #b97a0f;
+  --hot: #e2483d;
+  --dot-deadline: #e2483d;
+  --dot-class: #2563eb;
+  --panel: #17203a;
+  --panel-text: #f4f2ea;
+  --panel-dim: #a7aec4;
+  --radius: 12px;
+  --space-surface: var(--surface);
+  --space-surface-alt: var(--surface);
+  --space-muted: var(--dim);
+  --space-border: var(--border);
+  --space-accent: var(--accent);
+}
+
+/* Shredder (client/src/Shredder.tsx): each clip-path strip of the
+   front "Coming up" card drops, drifts and fades like paper going
+   through a shredder. Delay/duration are set inline per strip;
+   --shred-rot / --shred-drift vary the fall by strip parity. */
+@keyframes shredder-fall {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--shred-drift, 0px), 55%) rotate(var(--shred-rot, 2deg));
+    opacity: 0;
+  }
+}
+
+.shredder-strip {
+  animation-name: shredder-fall;
+  animation-duration: 650ms;
+  animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.4);
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
+}
+
+/* BranchedMenu (client/src/BranchedMenu.tsx): the bottom-left panel
+   rises up from its toggle button and its items stagger in along
+   their branches. Delays are set inline per item. */
+@keyframes branched-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes branched-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.branched-panel {
+  animation: branched-panel-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: left bottom;
+}
+
+.branched-item {
+  animation: branched-item-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* SplitText (client/src/SplitText.tsx): each character of the
+   "What's due" heading rises and fades in with a stagger set
+   inline per character, then rests in its natural position. */
+@keyframes split-char-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em) rotate(2deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+.split-char {
+  animation-name: split-char-in;
+  animation-duration: 450ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+@keyframes texttype-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.texttype-cursor {
+  animation: texttype-blink 0.8s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shredder-strip {
+    animation: none;
+  }
+  .texttype-cursor {
+    animation: none;
+  }
+  .split-char {
+    animation: none;
+  }
+  .branched-panel,
+  .branched-item {
+    animation: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1119;
+    --surface: #171c2a;
+    --text: #eef0f6;
+    --dim: #9aa3b8;
+    --border: #2a3042;
+    --accent: #3ecf8e;
+    --ok: #3ecf8e;
+    --warn: #e0a83e;
+    --hot: #ff6f61;
+    --dot-deadline: #ff6f61;
+    --dot-class: #60a5fa;
+    --panel: #05070d;
+    --panel-text: #f4f2ea;
+    --panel-dim: #8f97ad;
+  }
+}
