@@ -1,11 +1,11 @@
-// Actions for the Deadline Dashboard.
+// Actions for the ULearn Deadline Dashboard.
 //
 // Data contract: every deadline row carries its own status (confirmed /
-// unconfirmed / group_dependent / date_tba) and a source label naming
-// where the date was seen. Rows are seeded once from the sample data
-// below (replace it with your own) and afterwards only changed by
-// applyRefresh, which a re-check task calls — never rewritten from code
-// on read.
+// unconfirmed / group_dependent) and a source label naming where the date
+// was seen on ULearn. Rows are seeded once from the user's verified ULearn
+// record (see DATA-PLAN.md) and afterwards only changed by applyRefresh,
+// which is called by the spawned ULearn re-check task — never rewritten
+// from code on read.
 
 import { defineAction, z, type ActionsModule } from "@hatch/space-sdk";
 import { asc, eq } from "drizzle-orm";
@@ -25,26 +25,49 @@ const deadlineShape = z.object({
   sourceLabel: z.string(),
   section: z.string(),
   done: z.boolean(),
+  /** 'ulearn' | 'custom' — custom rows are the user's own events. */
+  origin: z.string(),
+  priority: z.boolean(),
+});
+
+const stickerShape = z.object({
+  id: z.number(),
+  dateKey: z.string(),
+  stickerType: z.string(),
+});
+
+const noteShape = z.object({
+  dateKey: z.string(),
+  text: z.string(),
 });
 
 const dashboardResponse = z.object({
   deadlines: z.array(deadlineShape),
+  stickers: z.array(stickerShape),
+  notes: z.array(noteShape),
+  /** The user's custom photo sticker as a JPEG data URL, or null. */
+  photoSticker: z.string().nullable(),
+  /** Everything currently ticked done — including done rows whose
+   *  date has passed (the main deadlines list hides overdue rows,
+   *  but the Done history shows the user's full ticked-off record).
+   *  Newest due date first. */
+  doneItems: z.array(deadlineShape),
   lastCheckedAt: z.string().nullable(),
 });
 
 type DeadlineRow = typeof schema.deadlines.$inferSelect;
 
-/** Overdue items are never shown: a dated row is overdue once its end
- *  time (or start, when no end is stored) has passed. Watch rows carry
- *  no exact date, but when an item was announced with a window, the
- *  window's end is stored in dueEndLocal and the row is overdue once
- *  that window has fully passed; a windowless TBA row (dueEndLocal
- *  null) is never overdue. dueLocal strings are wall-clock in the
- *  TIMEZONE below — set it to your own timezone offset. */
+/** The user does not want to see overdue items at all (asked 10 Nov 2026):
+ *  a dated row is overdue once its end time (or start, when no end is
+ *  stored) has passed. Watch rows carry no exact date, but when ULearn
+ *  announced a window for one, the window's end is stored in dueEndLocal
+ *  and the row is overdue once that window has fully passed; a windowless
+ *  TBA row (dueEndLocal null) is never overdue. dueLocal strings are
+ *  Asia/Kuala_Lumpur wall-clock (UTC+8). */
 function isOverdueRow(row: DeadlineRow, now: Date): boolean {
-  // Routine rows (imported class timetable) are never overdue: the
-  // calendar month view shows past sessions when browsing back, and a
-  // re-check must never delete them.
+  // Routine rows (the user's TimeEdit class timetable) are never overdue:
+  // the calendar month view shows past sessions when browsing back, and
+  // the daily ULearn re-check must never delete them.
   if (row.section === "routine") return false;
   if (row.section === "watch") {
     if (!row.dueEndLocal) return false;
@@ -69,6 +92,8 @@ function toShape(row: DeadlineRow): z.infer<typeof deadlineShape> {
     sourceLabel: row.sourceLabel,
     section: row.section,
     done: row.done === 1,
+    origin: row.origin,
+    priority: row.priority === 1,
   };
 }
 
@@ -173,7 +198,7 @@ const applyRow = z.object({
 export const Actions = {
   getDashboard: defineAction({
     description:
-      "Returns stored deadlines sorted by due date, with overdue dated items left out, plus when the data was last checked.",
+      "Returns stored ULearn deadlines sorted by due date, with overdue dated items left out (the user does not want to see them), plus when ULearn was last checked.",
     request: z.object({}),
     response: dashboardResponse,
     async handler(ctx): Promise<z.infer<typeof dashboardResponse>> {
@@ -187,9 +212,36 @@ export const Actions = {
         .from(schema.meta)
         .where(eq(schema.meta.key, "lastCheckedAt"))
         .limit(1);
+      const stickerRows = await db
+        .select()
+        .from(schema.stickerPlacements)
+        .orderBy(asc(schema.stickerPlacements.id));
+      const noteRows = await db
+        .select()
+        .from(schema.dayNotes)
+        .orderBy(asc(schema.dayNotes.dateKey));
+      const photoRows = await db
+        .select()
+        .from(schema.userData)
+        .where(eq(schema.userData.key, "photo_sticker"))
+        .limit(1);
       const now = new Date();
       return {
         deadlines: rows.filter((row) => !isOverdueRow(row, now)).map(toShape),
+        stickers: stickerRows.map((row) => ({
+          id: row.id,
+          dateKey: row.dateKey,
+          stickerType: row.stickerType,
+        })),
+        notes: noteRows.map((row) => ({
+          dateKey: row.dateKey,
+          text: row.text,
+        })),
+        photoSticker: photoRows[0]?.value ?? null,
+        doneItems: rows
+          .filter((row) => row.done === 1 && row.section !== "routine")
+          .sort((a, b) => (a.dueLocal < b.dueLocal ? 1 : -1))
+          .map(toShape),
         lastCheckedAt: metaRows[0]?.value ?? null,
       };
     },
@@ -219,6 +271,8 @@ export const Actions = {
       return { seeded: SAMPLE_SEED_ROWS.length };
     },
   }),
+
+
 
   importRoutine: defineAction({
     description:
@@ -257,7 +311,7 @@ export const Actions = {
 
   setDeadlineDone: defineAction({
     description:
-      "Marks a deadline as done (or back to not done) when the user ticks its checkbox in the calendar; the state is stored on the row so it survives reloads and re-checks.",
+      "Marks a deadline as done (or back to not done) when the user ticks its checkbox in the calendar; the state is stored on the row so it survives reloads and ULearn re-checks.",
     request: z.object({
       itemKey: z.string().min(1),
       done: z.boolean(),
@@ -273,6 +327,264 @@ export const Actions = {
       return { ok: true };
     },
   }),
+
+  addSticker: defineAction({
+    description:
+      "Sticks a sticker on a calendar day (dateKey 'YYYY-MM-DD') when the user drags or taps one from the sticker tray; stored as its own row so placements survive reloads and ULearn re-checks.",
+    request: z.object({
+      dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      stickerType: z.string().min(1).max(24),
+    }),
+    response: stickerShape,
+    async handler(ctx, args): Promise<z.infer<typeof stickerShape>> {
+      const db = ctx.db<typeof schema>();
+      const inserted = await db
+        .insert(schema.stickerPlacements)
+        .values({ dateKey: args.dateKey, stickerType: args.stickerType })
+        .returning({ id: schema.stickerPlacements.id });
+      ctx.invalidateQueries();
+      return {
+        id: inserted[0]?.id ?? 0,
+        dateKey: args.dateKey,
+        stickerType: args.stickerType,
+      };
+    },
+  }),
+
+  removeSticker: defineAction({
+    description:
+      "Peels a sticker off the calendar: deletes one sticker placement by id. The ULearn refresh never touches sticker rows.",
+    request: z.object({
+      id: z.number().int(),
+    }),
+    response: z.object({ ok: z.boolean() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      await db
+        .delete(schema.stickerPlacements)
+        .where(eq(schema.stickerPlacements.id, args.id));
+      ctx.invalidateQueries();
+      return { ok: true };
+    },
+  }),
+
+  setDeadlinePriority: defineAction({
+    description:
+      "Stars (or unstars) a deadline as important when the user taps its star toggle; stored on the row like the done tick, so it survives reloads and ULearn re-checks.",
+    request: z.object({
+      itemKey: z.string().min(1),
+      priority: z.boolean(),
+    }),
+    response: z.object({ ok: z.boolean() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      await db
+        .update(schema.deadlines)
+        .set({ priority: args.priority ? 1 : 0, updatedAt: new Date() })
+        .where(eq(schema.deadlines.itemKey, args.itemKey));
+      ctx.invalidateQueries();
+      return { ok: true };
+    },
+  }),
+
+  addCustomEvent: defineAction({
+    description:
+      "Adds an event the user created themselves (title, date, optional time, course label, optional note) as a deadline row with origin 'custom'; it behaves like a ULearn deadline everywhere but is never touched by the ULearn refresh.",
+    request: z.object({
+      title: z.string().trim().min(1).max(120),
+      dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      time: z
+        .string()
+        .regex(/^\d{2}:\d{2}$/)
+        .nullable()
+        .optional(),
+      course: z.enum(["EM", "EM II", "HSE", "FIS", "OOP", "DE", "Personal"]),
+      note: z.string().trim().max(500).default(""),
+    }),
+    response: z.object({ itemKey: z.string() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const courses: Record<string, { code: string; name: string }> = {
+        EM: { code: "EM", name: "Mathematical Methods" },
+        "EM II": { code: "Eng Maths II", name: "Engineering Mathematics II" },
+        HSE: { code: "HSE101", name: "Health and Safety" },
+        FIS: { code: "PHI101", name: "Philosophy and Current Issues" },
+        OOP: { code: "OOP", name: "Object-Oriented Programming" },
+        DE: { code: "EE201", name: "Digital Electronics" },
+        Personal: { code: "Personal", name: "Personal" },
+      };
+      const course = courses[args.course] ?? { code: "Personal", name: "Personal" };
+      const itemKey = `custom-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      await db.insert(schema.deadlines).values({
+        itemKey,
+        courseCode: course.code,
+        courseName: course.name,
+        title: args.title,
+        kind: "custom",
+        dueLocal: `${args.dateKey}T${args.time ?? "23:59"}`,
+        dueEndLocal: null,
+        status: "confirmed",
+        details: args.note,
+        sourceLabel: "Added by you",
+        section: "upcoming",
+        origin: "custom",
+        updatedAt: new Date(),
+      });
+      ctx.invalidateQueries();
+      return { itemKey };
+    },
+  }),
+
+  updateCustomEvent: defineAction({
+    description:
+      "Edits one of the user's own custom events (title, date, time, course label, note). Only rows with origin 'custom' can be edited; ULearn rows are refused.",
+    request: z.object({
+      itemKey: z.string().min(1),
+      title: z.string().trim().min(1).max(120),
+      dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      time: z
+        .string()
+        .regex(/^\d{2}:\d{2}$/)
+        .nullable()
+        .optional(),
+      course: z.enum(["EM", "EM II", "HSE", "FIS", "OOP", "DE", "Personal"]),
+      note: z.string().trim().max(500).default(""),
+    }),
+    response: z.object({ ok: z.boolean() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const existing = await db
+        .select({ origin: schema.deadlines.origin })
+        .from(schema.deadlines)
+        .where(eq(schema.deadlines.itemKey, args.itemKey))
+        .limit(1);
+      if (!existing[0] || existing[0].origin !== "custom") {
+        throw new Error("Only events you added yourself can be edited.");
+      }
+      const courses: Record<string, { code: string; name: string }> = {
+        EM: { code: "EM", name: "Mathematical Methods" },
+        "EM II": { code: "Eng Maths II", name: "Engineering Mathematics II" },
+        HSE: { code: "HSE101", name: "Health and Safety" },
+        FIS: { code: "PHI101", name: "Philosophy and Current Issues" },
+        OOP: { code: "OOP", name: "Object-Oriented Programming" },
+        DE: { code: "EE201", name: "Digital Electronics" },
+        Personal: { code: "Personal", name: "Personal" },
+      };
+      const course = courses[args.course] ?? { code: "Personal", name: "Personal" };
+      await db
+        .update(schema.deadlines)
+        .set({
+          courseCode: course.code,
+          courseName: course.name,
+          title: args.title,
+          dueLocal: `${args.dateKey}T${args.time ?? "23:59"}`,
+          details: args.note,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.deadlines.itemKey, args.itemKey));
+      ctx.invalidateQueries();
+      return { ok: true };
+    },
+  }),
+
+  deleteCustomEvent: defineAction({
+    description:
+      "Deletes one of the user's own custom events. Only rows with origin 'custom' can be deleted; ULearn rows are refused.",
+    request: z.object({
+      itemKey: z.string().min(1),
+    }),
+    response: z.object({ ok: z.boolean() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const existing = await db
+        .select({ origin: schema.deadlines.origin })
+        .from(schema.deadlines)
+        .where(eq(schema.deadlines.itemKey, args.itemKey))
+        .limit(1);
+      if (!existing[0] || existing[0].origin !== "custom") {
+        throw new Error("Only events you added yourself can be deleted.");
+      }
+      await db
+        .delete(schema.deadlines)
+        .where(eq(schema.deadlines.itemKey, args.itemKey));
+      ctx.invalidateQueries();
+      return { ok: true };
+    },
+  }),
+
+  setDayNote: defineAction({
+    description:
+      "Saves the user's free-text note for one calendar day (one note per day, keyed by date 'YYYY-MM-DD'); stored in its own table so the ULearn refresh can never wipe it.",
+    request: z.object({
+      dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      text: z.string().trim().min(1).max(500),
+    }),
+    response: z.object({ ok: z.boolean() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      await db
+        .insert(schema.dayNotes)
+        .values({ dateKey: args.dateKey, text: args.text, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: schema.dayNotes.dateKey,
+          set: { text: args.text, updatedAt: new Date() },
+        });
+      ctx.invalidateQueries();
+      return { ok: true };
+    },
+  }),
+
+  deleteDayNote: defineAction({
+    description:
+      "Deletes the user's note for one calendar day.",
+    request: z.object({
+      dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }),
+    response: z.object({ ok: z.boolean() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      await db
+        .delete(schema.dayNotes)
+        .where(eq(schema.dayNotes.dateKey, args.dateKey));
+      ctx.invalidateQueries();
+      return { ok: true };
+    },
+  }),
+
+  setPhotoSticker: defineAction({
+    description:
+      "Saves the user's custom photo sticker (a client-downscaled JPEG data URL, max ~160px) or clears it when dataUrl is null. One photo sticker at a time; re-uploading replaces it. Stored in the user_data table, which the ULearn refresh never touches.",
+    request: z.object({
+      dataUrl: z
+        .string()
+        .max(200000)
+        .regex(/^data:image\/jpeg;base64,/)
+        .nullable(),
+    }),
+    response: z.object({ ok: z.boolean() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      if (args.dataUrl === null) {
+        await db
+          .delete(schema.userData)
+          .where(eq(schema.userData.key, "photo_sticker"));
+      } else {
+        await db
+          .insert(schema.userData)
+          .values({ key: "photo_sticker", value: args.dataUrl })
+          .onConflictDoUpdate({
+            target: schema.userData.key,
+            set: { value: args.dataUrl },
+          });
+      }
+      ctx.invalidateQueries();
+      return { ok: true };
+    },
+  }),
+
+
 
   refreshDeadlines: defineAction({
     description:
@@ -301,7 +613,7 @@ export const Actions = {
 
   applyRefresh: defineAction({
     description:
-      "Saves the results of a re-check: upserts each deadline by its stable item key and stamps the last-checked time.",
+      "Saves the results of a ULearn re-check: upserts each deadline by its stable item key and stamps the last-checked time.",
     request: z.object({
       items: z.array(applyRow),
       checkedAt: z.string().min(1),
@@ -355,11 +667,15 @@ export const Actions = {
           target: schema.meta.key,
           set: { value: args.checkedAt },
         });
-      // Throw away rows that have gone overdue — they are never shown.
-      // Watch rows are kept unless their announced window
-      // (stored as dueEndLocal) has fully passed.
+      // Throw away rows that have gone overdue — the user does not want
+      // to see them. Watch rows are kept unless their announced window
+      // (stored as dueEndLocal) has fully passed. Two kinds of rows are
+      // NEVER swept: the user's own custom events (origin 'custom' —
+      // user-owned data the refresh does not manage) and rows the user
+      // has ticked done (they are the record behind the Done history).
       const stored = await db.select().from(schema.deadlines);
       for (const row of stored) {
+        if (row.origin === "custom" || row.done === 1) continue;
         if (isOverdueRow(row, now)) {
           await db
             .delete(schema.deadlines)

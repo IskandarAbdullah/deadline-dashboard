@@ -277,9 +277,20 @@ export function Shredder({
 /** Presentational shell for one card inside Shredder, matching the
  *  React Bits Card look: a bordered, rounded surface that fills the
  *  stack cell so every card shares the tallest card's height. */
-export function ShredCard({ children }: { children: ReactNode }) {
+export function ShredCard({
+  children,
+  highlight = false,
+}: {
+  children: ReactNode;
+  /** Important (starred) cards carry a gold ring. */
+  highlight?: boolean;
+}) {
   return (
-    <article className="flex h-full flex-col rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.08)] sm:p-5">
+    <article
+      className={`flex h-full flex-col rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.08)] sm:p-5 ${
+        highlight ? "ring-2 ring-[#f6b73c]" : ""
+      }`}
+    >
       {children}
     </article>
   );

@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
  * out character by character with a blinking cursor.
  *
  * Placement/UX for this dashboard:
- * - Applied to the small "Last checked …" line under the
+ * - Applied to the small "ULearn last checked …" line under the
  *   title ONLY. The text is the live `lastCheckedAt` value,
  *   formatted exactly as before — never a hard-coded string — and
  *   when a re-check stores a newer timestamp the effect re-runs

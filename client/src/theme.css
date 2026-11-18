@@ -37,6 +37,8 @@
   --hot: #e2483d;
   --dot-deadline: #e2483d;
   --dot-class: #2563eb;
+  --dot-done: #1d7a4f;
+  --glare: rgba(29, 122, 79, 0.1);
   --panel: #17203a;
   --panel-text: #f4f2ea;
   --panel-dim: #a7aec4;
@@ -130,6 +132,130 @@
   will-change: transform, opacity;
 }
 
+/* CalendarDots (client/src/App.tsx): when a day has more than three
+   items, the three-dot window slides in from the right each second
+   as it cycles to the next item, so hidden dots (e.g. a red deadline
+   dot behind three blue class dots) come into view. */
+@keyframes cal-dots-slide {
+  from {
+    transform: translateX(8px);
+    opacity: 0.35;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.calendar-dots-slide {
+  animation: cal-dots-slide 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+/* AnimatedList (client/src/AnimatedList.tsx): the calendar's
+   day-detail rows stagger in — a short rise and fade — each time a
+   different day is tapped. Delay is set inline per row. */
+@keyframes animated-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animated-item {
+  animation-name: animated-item-in;
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+/* Sticker tray bottom sheet (client/src/App.tsx Calendar): the
+   sheet slides up from the bottom of the screen over a dimmed
+   backdrop when the star button is pressed; the sticker row
+   inside scrolls sideways with its scrollbar hidden. */
+@keyframes sticker-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes sticker-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sticker-sheet {
+  animation: sticker-sheet-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform;
+}
+
+/* Search popup top sheet (client/src/App.tsx): drops in from the
+   top edge with a small settle when the header's magnifier icon
+   opens it. The backdrop reuses .sticker-backdrop's fade. */
+@keyframes search-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-pop {
+  animation: search-pop-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+.sticker-backdrop {
+  animation: sticker-backdrop-in 200ms ease both;
+}
+
+.sticker-row {
+  scrollbar-width: none;
+}
+
+.sticker-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* Peeling a stuck sticker off a day: the corner lifts (transform
+   origin at the bottom-right, like the StickerPeel logo), it
+   rotates away, drifts up and fades. */
+@keyframes sticker-peel-away {
+  0% {
+    transform: rotate(0deg) translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  35% {
+    transform: rotate(-9deg) translate(2px, -3px) scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(-18deg) translate(7px, -12px) scale(0.82);
+    opacity: 0;
+  }
+}
+
+.sticker-peeling {
+  animation: sticker-peel-away 480ms cubic-bezier(0.5, 0, 0.9, 0.4) both;
+  transform-origin: 85% 90%;
+  will-change: transform, opacity;
+}
+
 @keyframes texttype-blink {
   0%,
   100% {
@@ -142,6 +268,23 @@
 
 .texttype-cursor {
   animation: texttype-blink 0.8s step-end infinite;
+}
+
+/* Confetti substitute under prefers-reduced-motion (client/src/
+   Confetti.tsx): instead of a particle burst, a ticked-done
+   checkbox gets one brief soft green pulse. */
+@keyframes done-pulse-anim {
+  0% {
+    box-shadow: 0 0 0 0 rgba(29, 122, 79, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(29, 122, 79, 0);
+  }
+}
+
+.done-pulse {
+  animation: done-pulse-anim 480ms ease-out both;
+  border-radius: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -158,6 +301,26 @@
   .branched-item {
     animation: none;
   }
+  .calendar-dots-slide {
+    animation: none;
+  }
+  .animated-item {
+    animation: none;
+  }
+  .sticker-sheet {
+    animation: sticker-backdrop-in 180ms ease both;
+  }
+  .search-pop {
+    animation: sticker-backdrop-in 180ms ease both;
+  }
+  .sticker-backdrop {
+    animation: none;
+  }
+  .sticker-peeling {
+    animation: none;
+    opacity: 0;
+    transition: opacity 180ms ease;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -173,6 +336,8 @@
     --hot: #ff6f61;
     --dot-deadline: #ff6f61;
     --dot-class: #60a5fa;
+    --dot-done: #3ecf8e;
+    --glare: rgba(62, 207, 142, 0.13);
     --panel: #05070d;
     --panel-text: #f4f2ea;
     --panel-dim: #8f97ad;

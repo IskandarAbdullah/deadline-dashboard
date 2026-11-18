@@ -22,7 +22,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
  * - Items are wired only to things this dashboard actually does
  *   (supplied by the caller): "Go to" branch — Today (jump the
  *   calendar to today) and Coming up (extend the hidden sections and
- *   scroll to them); a "Check again" leaf that runs the existing
+ *   scroll to them); a "Check ULearn" leaf that runs the existing
  *   re-check; and an "Open" branch with the user's two real study
  *   sites as new-tab links.
  * - Theme tokens only (surface/border/text/accent), so it matches in
@@ -101,6 +101,20 @@ const ClockIcon = (
   <Icon>
     <circle cx="12" cy="12" r="9" />
     <path d="M12 7v5l3.5 2" />
+  </Icon>
+);
+
+const PlusIcon = (
+  <Icon>
+    <path d="M12 5v14M5 12h14" />
+  </Icon>
+);
+
+const WeekIcon = (
+  <Icon>
+    <rect x="3" y="5" width="18" height="16" rx="2" />
+    <path d="M3 10h18M8 3v4M16 3v4" />
+    <path d="M7 14h4M7 17.5h7" />
   </Icon>
 );
 
@@ -243,11 +257,15 @@ function Branch({
 export function BranchedMenu({
   onGoToday,
   onGoComingUp,
+  onGoMyWeek,
+  onAddEvent,
   onCheck,
   checkPending,
 }: {
   onGoToday: () => void;
   onGoComingUp: () => void;
+  onGoMyWeek: () => void;
+  onAddEvent: () => void;
   onCheck: () => void;
   checkPending: boolean;
 }) {
@@ -330,18 +348,32 @@ export function BranchedMenu({
                 delay={90}
                 onClick={runAndClose(onGoComingUp)}
               />
+              <LeafButton
+                icon={WeekIcon}
+                label="My week"
+                ariaLabel="Show this week's classes (side menu)"
+                delay={140}
+                onClick={runAndClose(onGoMyWeek)}
+              />
+              <LeafButton
+                icon={PlusIcon}
+                label="Add event"
+                ariaLabel="Add your own event (side menu)"
+                delay={190}
+                onClick={runAndClose(onAddEvent)}
+              />
             </Branch>
 
             <li className="branched-item" style={{ animationDelay: "140ms" }}>
               <button
                 type="button"
-                aria-label="Check again (side menu)"
+                aria-label="Check ULearn again (side menu)"
                 disabled={checkPending}
                 onClick={runAndClose(onCheck)}
                 className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left font-display text-sm font-extrabold tracking-wide hover:bg-[var(--bg)] disabled:opacity-50"
               >
                 <span className="text-[var(--dim)]">{RefreshIcon}</span>
-                {checkPending ? "Checking…" : "Check again"}
+                {checkPending ? "Checking…" : "Check ULearn"}
               </button>
             </li>
 
@@ -354,17 +386,17 @@ export function BranchedMenu({
             >
               <LeafLink
                 icon={BookIcon}
-                label="LMS"
-                ariaLabel="Open the LMS in a new tab"
-                href="https://example.com/lms"
+                label="ULearn"
+                ariaLabel="Open ULearn in a new tab"
+                href="https://your-lms.example.com"
                 delay={190}
                 onClick={() => setOpen(false)}
               />
               <LeafLink
                 icon={ClockIcon}
-                label="Timetable"
-                ariaLabel="Open the timetable in a new tab"
-                href="https://example.com/timetable"
+                label="TimeEdit"
+                ariaLabel="Open TimeEdit in a new tab"
+                href="https://www.timeedit.net"
                 delay={240}
                 onClick={() => setOpen(false)}
               />

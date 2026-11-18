@@ -1,5 +1,5 @@
 {
-  "name": "deadline-dashboard",
+  "name": "hatch-ts-space-ulearn-deadline-dashboard",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.10",
